@@ -48,7 +48,7 @@ cp .env.example .env.local
 
 ```bash
 uv run auth-engine-data all
-uv run auth-engine-data all --create-tables   # fresh DB only (create_all, not Alembic)
+uv run auth-engine-data all --create-tables   # local dev only — skips Alembic; never use in production
 uv run auth-engine-data roles
 uv run auth-engine-data superadmin            # requires roles first
 ```
