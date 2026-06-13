@@ -1,29 +1,34 @@
 # auth-engine-data
 
-Seed data and bootstrap tooling for **AuthEngine**, kept separate from the
-`auth-engine` service repository.
+Seed data and bootstrap tooling for **AuthEngine** — RBAC catalogue and super-admin provisioning.
 
-It contains the role/permission catalogue (`rbac_seed`) and the super-admin
-bootstrap (`bootstrap`) that used to live inside `auth_engine.core`. The service
-no longer seeds on startup — run this tool explicitly after the database schema
-is in place.
+**Documentation:** [auth-engine-docs](https://github.com/auth-engine/auth-engine-docs) · published at [docs.authengine.org](https://docs.authengine.org)
 
-## How it works
+| Guide | Link |
+|-------|------|
+| Quick Start | [quick-start.md](https://docs.authengine.org/quick-start/) |
+| OAuth2 / OIDC | [oauth2-oidc-guides.md](https://docs.authengine.org/oauth2-oidc-guides/) |
+| API Reference | [api-reference.md](https://docs.authengine.org/api-reference/) |
+| Architecture | [architecture.md](https://docs.authengine.org/architecture/) |
+| Deployment | [deployment.md](https://docs.authengine.org/deployment/) |
+| Security | [security-overview.md](https://docs.authengine.org/security-overview/) |
 
-This package depends on `auth-engine` as a **library** so the ORM models,
-settings and security helpers remain the single source of truth. It opens its
-own async session against the same database and applies the seeds idempotently.
+## What this repository is
 
-## Install
+Standalone CLI for seeding roles, permissions, and the super admin. It depends on **[auth-engine](https://github.com/auth-engine/auth-engine)** as a library so ORM models and settings stay the single source of truth. Run explicitly after migrations; all operations are idempotent. There is no Dockerfile — use as a one-off job (init container, CI step, or manual command).
 
-Requires Python 3.12+. Using [uv](https://docs.astral.sh/uv/) (recommended):
+## Install, configure & run
+
+Requires Python **3.12+**. The default `uv` setup expects `auth-engine` as a sibling directory (`../auth-engine`).
+
+**Install** with [uv](https://docs.astral.sh/uv/) (recommended):
 
 ```bash
 cd auth-engine-data
-uv sync            # resolves the local ../auth-engine path dependency
+uv sync
 ```
 
-Or with pip + a virtualenv:
+Or with pip:
 
 ```bash
 cd auth-engine-data
@@ -32,38 +37,43 @@ pip install -e ../auth-engine
 pip install -e .
 ```
 
-## Configure
-
-Configuration is read through `auth_engine`'s settings, which load `.env.local`
-from the current working directory:
+**Configure** — settings load `.env.local` from the current working directory:
 
 ```bash
 cp .env.example .env.local
-# edit .env.local — at minimum POSTGRES_URL, SECRET_KEY, JWT_SECRET_KEY,
-# MONGODB_URL, REDIS_URL and the SUPERADMIN_* values
+# POSTGRES_URL, SECRET_KEY, JWT_SECRET_KEY, MONGODB_URL, REDIS_URL, SUPERADMIN_*
 ```
 
-## Run
+**Run:**
 
 ```bash
-# Seed roles & permissions, then bootstrap the super admin
 uv run auth-engine-data all
-
-# Optionally create tables first (metadata create_all) for a fresh DB
-uv run auth-engine-data all --create-tables
-
-# Individual steps
+uv run auth-engine-data all --create-tables   # fresh DB only (create_all, not Alembic)
 uv run auth-engine-data roles
-uv run auth-engine-data superadmin
+uv run auth-engine-data superadmin            # requires roles first
 ```
 
 (If installed with pip, drop the `uv run` prefix.)
 
-> Order matters: `superadmin` requires the `SUPER_ADMIN` role, so run `roles`
-> (or `all`) first.
+## Production
 
-## Deployment note
+| Host | Role |
+|------|------|
+| [api.authengine.org](https://api.authengine.org) | API + Swagger |
+| [auth.authengine.org](https://auth.authengine.org) | OIDC / login UI |
+| [app.authengine.org](https://app.authengine.org) | Admin dashboard |
+| [docs.authengine.org](https://docs.authengine.org) | Documentation |
 
-Because seeding is no longer part of the API server's startup, run
-`auth-engine-data all` as a one-off job after migrations whenever you stand up a
-new environment (e.g. an init container, a CI step, or a manual command).
+## Contributing
+
+See [Contributing](https://docs.authengine.org/contributing/) or [CONTRIBUTING.md](CONTRIBUTING.md). Report security issues per [Security Policy](https://docs.authengine.org/security-policy/) — not via public issues.
+
+## Related repositories
+
+| Repository | Role |
+|------------|------|
+| [auth-engine](https://github.com/auth-engine/auth-engine) | FastAPI backend — IAM, OIDC, introspection |
+| [auth-engine-dashboard](https://github.com/auth-engine/auth-engine-dashboard) | Next.js admin dashboard |
+| [auth-engine-docs](https://github.com/auth-engine/auth-engine-docs) | Platform documentation |
+| [auth-engine-infra](https://github.com/auth-engine/auth-engine-infra) | Terraform & Docker Compose |
+| [.github](https://github.com/auth-engine/.github) | Org profile, contributing & security policy |
