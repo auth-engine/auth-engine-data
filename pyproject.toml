@@ -1,0 +1,34 @@
+[project]
+name = "auth-engine-data"
+version = "0.1.0"
+description = "Seed data and bootstrap tooling for AuthEngine (roles, permissions, super admin)"
+requires-python = ">=3.12"
+dependencies = [
+    "auth-engine",
+    "sqlalchemy",
+    "asyncpg",
+    "typer",
+]
+
+[project.scripts]
+auth-engine-data = "auth_engine_data.seed:app"
+
+[tool.uv.sources]
+# AuthEngine is consumed as a library so the ORM models / settings stay the
+# single source of truth. Point this at your local checkout (sibling repo).
+auth-engine = { path = "../auth-engine", editable = true }
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["B008"]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
