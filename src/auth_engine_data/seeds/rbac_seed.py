@@ -11,12 +11,12 @@ from auth_engine.models.role_permission import RolePermissionORM
 logger = logging.getLogger(__name__)
 
 DEFAULT_ROLES = [
-    ("SUPER_ADMIN", "Full platform control", RoleScope.PLATFORM, 100),
-    ("PLATFORM_ADMIN", "Manage organizations", RoleScope.PLATFORM, 80),
-    ("TENANT_OWNER", "Owner of organization", RoleScope.TENANT, 60),
-    ("TENANT_ADMIN", "Admin inside tenant", RoleScope.TENANT, 50),
-    ("TENANT_MANAGER", "Manager inside tenant", RoleScope.TENANT, 30),
-    ("TENANT_USER", "Standard tenant user", RoleScope.TENANT, 10),
+    ("SUPER_ADMIN", "Full platform control", RoleScope.PLATFORM, 100, False),
+    ("PLATFORM_ADMIN", "Manage organizations", RoleScope.PLATFORM, 80, False),
+    ("TENANT_OWNER", "Owner of organization", RoleScope.TENANT, 60, True),
+    ("TENANT_ADMIN", "Admin inside tenant", RoleScope.TENANT, 50, True),
+    ("TENANT_MANAGER", "Manager inside tenant", RoleScope.TENANT, 30, True),
+    ("TENANT_USER", "Standard tenant user", RoleScope.TENANT, 10, True),
 ]
 
 DEFAULT_PERMISSIONS = [
@@ -34,6 +34,7 @@ DEFAULT_PERMISSIONS = [
     ("tenant.users.manage", "Manage users in tenant"),
     ("tenant.roles.view", "View roles in tenant"),
     ("tenant.roles.assign", "Assign roles in tenant"),
+    ("tenant.roles.manage", "Create and manage roles in tenant"),
     ("auth.tokens.request", "Request authentication and verification tokens"),
     ("auth.password.reset", "Initiate and perform password reset"),
     ("auth.email.verify", "Perform email verification"),
@@ -68,6 +69,7 @@ ROLE_PERMISSIONS = {
         "tenant.users.manage",
         "tenant.roles.view",
         "tenant.roles.assign",
+        "tenant.roles.manage",
         "auth.tokens.request",
         "auth.password.reset",
         "auth.email.verify",
@@ -81,6 +83,7 @@ ROLE_PERMISSIONS = {
         "tenant.users.manage",
         "tenant.roles.view",
         "tenant.roles.assign",
+        "tenant.roles.manage",
         "auth.tokens.request",
         "auth.password.reset",
         "auth.email.verify",
@@ -109,26 +112,63 @@ ROLE_PERMISSIONS = {
 }
 
 
-async def seed_roles(db: AsyncSession) -> None:
-    # ── 1. Bulk upsert roles (1 query) ──────────────────────────────────────
-    role_rows = [
-        {"name": name, "description": desc, "scope": scope, "level": level}
-        for name, desc, scope, level in DEFAULT_ROLES
-    ]
-    await db.execute(
-        insert(RoleORM)
-        .values(role_rows)
-        .on_conflict_do_update(
-            index_elements=["name"],
-            set_={
-                "description": insert(RoleORM).excluded.description,
-                "scope": insert(RoleORM).excluded.scope,
-                "level": insert(RoleORM).excluded.level,
-            },
+async def _upsert_role(
+    db: AsyncSession,
+    *,
+    name: str,
+    description: str,
+    scope: RoleScope,
+    level: int,
+    is_template: bool,
+) -> RoleORM:
+    if scope == RoleScope.PLATFORM:
+        result = await db.execute(
+            select(RoleORM).where(
+                RoleORM.name == name,
+                RoleORM.scope == RoleScope.PLATFORM,
+                RoleORM.tenant_id.is_(None),
+            )
         )
-    )
+    else:
+        result = await db.execute(
+            select(RoleORM).where(
+                RoleORM.name == name,
+                RoleORM.is_template.is_(True),
+                RoleORM.tenant_id.is_(None),
+            )
+        )
 
-    # ── 2. Bulk upsert permissions (1 query) ────────────────────────────────
+    role = result.scalar_one_or_none()
+    if role:
+        role.description = description
+        role.level = level
+        role.is_template = is_template
+        return role
+
+    role = RoleORM(
+        name=name,
+        description=description,
+        scope=scope,
+        level=level,
+        is_template=is_template,
+        tenant_id=None,
+    )
+    db.add(role)
+    await db.flush()
+    return role
+
+
+async def seed_roles(db: AsyncSession) -> None:
+    for name, desc, scope, level, is_template in DEFAULT_ROLES:
+        await _upsert_role(
+            db,
+            name=name,
+            description=desc,
+            scope=scope,
+            level=level,
+            is_template=is_template,
+        )
+
     perm_rows = [{"name": name, "description": desc} for name, desc in DEFAULT_PERMISSIONS]
     await db.execute(
         insert(PermissionORM)
@@ -141,11 +181,14 @@ async def seed_roles(db: AsyncSession) -> None:
 
     await db.flush()
 
-    # ── 3. Fetch all roles + permissions in 2 queries ───────────────────────
-    roles = {r.name: r for r in (await db.execute(select(RoleORM))).scalars().all()}
+    roles = {
+        r.name: r
+        for r in (await db.execute(select(RoleORM).where(RoleORM.tenant_id.is_(None))))
+        .scalars()
+        .all()
+    }
     perms = {p.name: p for p in (await db.execute(select(PermissionORM))).scalars().all()}
 
-    # ── 4. Bulk upsert role-permission associations (1 query) ───────────────
     assoc_rows = [
         {"role_id": roles[role_name].id, "permission_id": perms[perm_name].id}
         for role_name, perm_names in ROLE_PERMISSIONS.items()
