@@ -1,6 +1,6 @@
 # auth-engine-data
 
-Seed data and bootstrap tooling for **AuthEngine** — RBAC catalogue and super-admin provisioning.
+Seed data tooling for **AuthEngine** — RBAC catalogue, super-admin provisioning, and optional platform-tenant config.
 
 **Documentation:** [auth-engine-docs](https://github.com/auth-engine/auth-engine-docs) · published at [docs.authengine.org](https://docs.authengine.org)
 
@@ -15,7 +15,24 @@ Seed data and bootstrap tooling for **AuthEngine** — RBAC catalogue and super-
 
 ## What this repository is
 
-Standalone CLI for seeding roles, permissions, and the super admin. It depends on **[auth-engine](https://github.com/auth-engine/auth-engine)** as a library so ORM models and settings stay the single source of truth. Run explicitly after migrations; all operations are idempotent. There is no Dockerfile — use as a one-off job (init container, CI step, or manual command).
+Standalone CLI for seeding roles, permissions, the super admin, and (optionally) platform-tenant email, SMS, social OAuth, and password policy. It depends on **[auth-engine](https://github.com/auth-engine/auth-engine)** as a **library** (ORM models, security helpers) but uses its **own** `.env.local` — it does not read `auth-engine/.env.local`.
+
+Run explicitly after Alembic migrations; all operations are idempotent. No Dockerfile — use as a one-off job (init container, CI step, or manual command).
+
+### Package layout
+
+```text
+auth_engine_data/
+├── seed.py              # CLI entry point
+├── core/
+│   ├── settings.py      # SeedSettings (.env.local)
+│   ├── db.py            # PostgreSQL engine + session
+│   └── runtime.py       # auth_engine import bootstrap (internal)
+└── seeds/
+    ├── rbac_seed.py
+    ├── super_admin_seed.py
+    └── platform_config_seed.py
+```
 
 ## Install, configure & run
 
@@ -37,23 +54,39 @@ pip install -e ../auth-engine
 pip install -e .
 ```
 
-**Configure** — settings load `.env.local` from the current working directory:
+**Configure** — copy `.env.example` to `.env.local`:
 
 ```bash
 cp .env.example .env.local
-# POSTGRES_URL, SECRET_KEY, JWT_SECRET_KEY, MONGODB_URL, REDIS_URL, SUPERADMIN_*
 ```
 
-**Run:**
+| Variable | Required | Notes |
+|----------|----------|-------|
+| `POSTGRES_URL` | Yes | Same database as auth-engine |
+| `SECRET_KEY` | Yes | Must match auth-engine `SECRET_KEY` when using `platform-config` |
+| `SUPERADMIN_EMAIL` / `SUPERADMIN_PASSWORD` | Yes | Super admin credentials |
+| `EMAIL_*`, `SMS_*`, `GOOGLE_*`, `AUTHENGINE_*`, `PASSWORD_*` | No | One-time platform-tenant seed (see `.env.example` comments) |
+
+For hosted Postgres, set `POSTGRES_SSL=true` in `.env.local`.
+
+**Run** (after `auth-engine migrate` in the auth-engine repo):
 
 ```bash
-uv run auth-engine-data all
-uv run auth-engine-data all --create-tables   # local dev only — skips Alembic; never use in production
+uv run auth-engine-data all                 # roles + super admin + platform config
 uv run auth-engine-data roles
-uv run auth-engine-data superadmin            # requires roles first
+uv run auth-engine-data superadmin          # requires roles first
+uv run auth-engine-data platform-config     # email / SMS / social / password policy only
+```
+
+Use `--create-tables` only for local experiments **without** Alembic — not after `auth-engine migrate`:
+
+```bash
+uv run auth-engine-data all --create-tables # local dev only — skip if migrate already ran
 ```
 
 (If installed with pip, drop the `uv run` prefix.)
+
+After seeding, manage platform email, SMS, OAuth, and password policy in the **dashboard** (Communications / Auth settings).
 
 ## Production
 

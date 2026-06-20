@@ -1,0 +1,2 @@
+[console_scripts]
+auth-engine-data = auth_engine_data.seed:app

@@ -1,13 +1,14 @@
 [project]
 name = "auth-engine-data"
 version = "0.1.0"
-description = "Seed data and bootstrap tooling for AuthEngine (roles, permissions, super admin)"
+description = "Seed data tooling for AuthEngine (roles, super admin, platform config)"
 requires-python = ">=3.12"
 dependencies = [
     "auth-engine",
     "sqlalchemy",
     "asyncpg",
     "typer",
+    "pydantic-settings",
 ]
 
 [project.scripts]
