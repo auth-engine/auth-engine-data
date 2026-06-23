@@ -8,11 +8,45 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from auth_engine.core.security import security as security_utils
 from auth_engine.models import RoleORM, TenantORM, UserORM, UserRoleORM
 from auth_engine.models.tenant import TenantType
+from auth_engine.models.tenant_auth_config import TenantAuthConfigORM
 from auth_engine.schemas.user import AuthStrategy, UserStatus
 
 from auth_engine_data.core.settings import settings
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_PLATFORM_ALLOWED_METHODS = ["email_password"]
+DEFAULT_PLATFORM_PASSWORD_POLICY = {
+    "min_length": 8,
+    "require_uppercase": True,
+    "require_lowercase": True,
+    "require_digit": True,
+    "require_special": True,
+}
+
+
+async def _ensure_platform_auth_config(db: AsyncSession, platform_id) -> None:
+    auth_config = await db.scalar(
+        select(TenantAuthConfigORM).where(TenantAuthConfigORM.tenant_id == platform_id)
+    )
+    if auth_config:
+        if "email_password" not in (auth_config.allowed_methods or []):
+            auth_config.allowed_methods = [
+                "email_password",
+                *(auth_config.allowed_methods or []),
+            ]
+        return
+
+    db.add(
+        TenantAuthConfigORM(
+            tenant_id=platform_id,
+            allowed_methods=DEFAULT_PLATFORM_ALLOWED_METHODS.copy(),
+            mfa_required=False,
+            password_policy=DEFAULT_PLATFORM_PASSWORD_POLICY.copy(),
+            session_ttl_seconds=3600,
+            allowed_domains=[],
+        )
+    )
 
 
 async def seed_super_admin(db: AsyncSession) -> None:
@@ -44,6 +78,8 @@ async def seed_super_admin(db: AsyncSession) -> None:
             )
         )
         if assignment:
+            await _ensure_platform_auth_config(db, platform.id)
+            await db.commit()
             logger.info("Super admin already seeded — skipping")
             return
 
@@ -80,6 +116,8 @@ async def seed_super_admin(db: AsyncSession) -> None:
         db.add(platform)
         await db.flush()
         logger.info("Created platform tenant")
+
+    await _ensure_platform_auth_config(db, platform.id)
 
     await db.execute(
         insert(UserRoleORM)
