@@ -88,6 +88,23 @@ uv run auth-engine-data all --create-tables # local dev only — skip if migrate
 
 After seeding, manage platform email, SMS, OAuth, and password policy in the **dashboard** (Communications / Auth settings).
 
+### Production seeding (K8s / Helm)
+
+On first deploy, enable the Helm seed Job or run manually:
+
+```bash
+# Helm values (first install only)
+seed:
+  enabled: true
+  superadminEmail: "admin@example.com"
+  superadminPassword: "<strong-password>"
+
+# Or from auth-engine-infra:
+./deploy/auth-engine-deploy.sh k8s-seed
+```
+
+Requires `POSTGRES_URL` and `SECRET_KEY` matching the Helm chart secrets. See [deployment guide](https://docs.authengine.org/deployment/).
+
 ## Production
 
 | Host | Role |
